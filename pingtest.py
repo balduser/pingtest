@@ -1,12 +1,16 @@
-"""Тестирование задержки пингов к заданному узлу сети и отрисовка временного и частотного распределения задержек."""
+ """Тестирование задержки пингов к заданному узлу сети и отрисовка временного и частотного распределения задержек."""
 
 import matplotlib.pyplot as plt
 import os
-import sys
 from datetime import datetime
 from matplotlib.ticker import (MultipleLocator, IndexLocator)
 from subprocess import Popen, PIPE
 
+saving_folder = 'reports'
+try:
+    os.mkdir(saving_folder)
+except:
+    pass
 start_time = datetime.strftime(datetime.now(), "%Y.%m.%d %H:%M:%S")
 timesec = int(datetime.strftime(datetime.now(), "%S"))
 timemin = int(datetime.strftime(datetime.now(), "%M"))
@@ -47,8 +51,9 @@ def pinger(request: str):
             break
 
 
-def lego(inputfile: str):  # lego (лат) - читать, собирать, говорить. Для построения графика по txt логам
-    """Читает файл и выдаёт ответы вместо pinger()"""
+def reader(inputfile: str):
+    """Читает файл и выдаёт ответы вместо pinger().
+    Для построения графика по txt логам."""
 
     global start_time
     global timehour
@@ -60,7 +65,6 @@ def lego(inputfile: str):  # lego (лат) - читать, собирать, г�
         timehour, timemin, timesec = map(int, start_time.split()[1].split(':'))
     except:
         print('Не удалось получить время из файла')
-    open(inputfile).close
     counter = 0
     print('reading {}...'.format(inputfile))
     with open(inputfile, 'r') as file:
@@ -86,20 +90,20 @@ def lego(inputfile: str):  # lego (лат) - читать, собирать, г�
 
 
 def receptor(request, mode, location, comment):
-    """получает ответы от pinger() или lego() и проводит необходимые действия над данными, чтобы передать их в pictura()
+    """получает ответы от pinger() или reader() и проводит необходимые действия над данными, чтобы передать их в graph_plotter()
     {0, 1, 4, 9 ... 100, 9999, 'Lost', 'counter', 'request', 'mode', 'location', 'comment', 'statistics', 'pings'}"""
 
     answer = {i**2 : 0 for i in range(qint)}
     answer.update({'Lost': 0, 'counter':0, 'request': request, 'mode': mode, 'location': location, 'comment': comment,
                    'statistics': '', 'pings': []})
     pings = answer['pings']
-    filename = '{} {} {}.png'.format(location, start_time.replace(':', '-'), comment)
+    filename = f"{saving_folder}\{location} {start_time.replace(':', '-')} {comment}.txt"
     if mode in ('f'):
-        report = open(filename.replace('png', 'txt'), 'w')
+        report = open(filename, 'w')
     if 'ping' in request:
         a = iter(pinger(request))
     elif '.txt' in request:
-        a = iter(lego(request))
+        a = iter(reader(request))
     try:  # try для KeyboardInterrupt
         while True:
             try:  # try для StopIteration
@@ -109,16 +113,13 @@ def receptor(request, mode, location, comment):
                 value = nextans[1]
                 if type(value) == str:
                     if value == 'timeout':
-#                        output[-2] += 1 #
                         answer['Lost'] += 1
                         pings.append(0)
                     else:
-#                        statistics = value
                         answer['statistics'] = value
                 else:
                     for i in range(qint+1): # for qint = 11: i -> 0-11
                         if value <= intervals[i + 1]: # intervals: [0, 1, 4 ... 100, 9999, timeout]
-#                            output[i] += 1 #
                             answer[i**2] += 1
                             pings.append(value)
                             break
@@ -133,20 +134,18 @@ def receptor(request, mode, location, comment):
     finally:
         if mode in ('f'):
             report.close()
-        pictura(answer)
+        graph_plotter(answer)
 
 
-def pictura(data: dict):
+def graph_plotter(data: dict):
     """Создаёт изображение по полученным от receptor() данным.
     На графике для отображения qint столбцов используются qint + 2 точек:
     1 доп. для задания краёв столбцов
     1 доп. для ещё одного интервала timeout"""
 
-#    plt.ion()
     fig, (ax1, ax2) = plt.subplots(nrows=2, ncols=1, figsize=(15, 8))
 
-    # График распределения по времени ответа
-    # Абсциссы (координаты) рисок на шкале x графика распределений
+    # Абсциссы (координаты на шкале x) рисок графика распределений
     xticks = list(range(qint + 2))
     ax1.set_xticks(xticks)
     # Последний столбец в height всегда = 0 и нужен для соответствия len(heights) числу len(xticks)
@@ -179,11 +178,11 @@ def pictura(data: dict):
         ax2.tick_params(which='major', width=1.5)
     plt.title(f"{start_time}, расположение: {data['location']}\n{data['request']}\nОтправлено запросов: {data['counter']}",
               pad=250)  # pad=245, для нетбука 240
-    plt.show()
-    plt.pause(0.0001)
-    filename = '{} {} {}.png'.format(data['location'], start_time.replace(':', '-'), data['comment'])
+#    plt.pause(0.0001)
+    filename = f"{saving_folder}\{data['location']} {start_time.replace(':', '-')} {data['comment']}.png"
     if data['mode'] in ('l', 'f'):
         fig.savefig(filename)
+    plt.show()
 
 
 def ticks_maker(counter: int):
@@ -221,7 +220,7 @@ def ticks_maker(counter: int):
 
 if __name__ == "__main__":
     receptor('ping 192.168.111.59 -n 30', 'f', '5.18', 'wire')
-#        receptor('Arena 2021.05.30 11-10-19 Main Commutator.txt', 'r', 'wire', 'vlan 111 Telecoma')
+#    receptor('Arena 2021.05.30 11-10-19 Main Commutator.txt', 'r', 'wire', 'vlan 111 Telecoma')
 
 
 """ Запрос, режим, расположение, комментарий
